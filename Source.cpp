@@ -22,6 +22,15 @@ public:
     static void LeftUp() { INPUT i = {}; i.type = INPUT_MOUSE; i.mi.dwFlags = MOUSEEVENTF_LEFTUP;   SendInput(1, &i, sizeof(INPUT)); }
     static void RightDown() { INPUT i = {}; i.type = INPUT_MOUSE; i.mi.dwFlags = MOUSEEVENTF_RIGHTDOWN; SendInput(1, &i, sizeof(INPUT)); }
     static void RightUp() { INPUT i = {}; i.type = INPUT_MOUSE; i.mi.dwFlags = MOUSEEVENTF_RIGHTUP;   SendInput(1, &i, sizeof(INPUT)); }
+
+    static void Scroll(int amount)
+    {
+        INPUT input = {};
+        input.type = INPUT_MOUSE;
+        input.mi.dwFlags = MOUSEEVENTF_WHEEL;
+        input.mi.mouseData = amount;
+        SendInput(1, &input, sizeof(INPUT));
+    }
 };
 
 // Key states
@@ -29,9 +38,11 @@ std::atomic<bool> W_pressed(false);
 std::atomic<bool> A_pressed(false);
 std::atomic<bool> S_pressed(false);
 std::atomic<bool> D_pressed(false);
-std::atomic<bool> Q_pressed(false); // left click hold
-std::atomic<bool> E_pressed(false); // right click hold
-std::atomic<bool> active(false);    // ON/OFF toggle
+std::atomic<bool> Q_pressed(false);
+std::atomic<bool> E_pressed(false);
+std::atomic<bool> R_pressed(false); // scroll up
+std::atomic<bool> F_pressed(false); // scroll down
+std::atomic<bool> active(false);
 
 HHOOK keyboardHook;
 
@@ -47,13 +58,13 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
         bool keyDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
         bool keyUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
 
-        // Double-tap Left Alt toggle (do NOT block Alt for other apps)
+        // Double-tap Left Alt toggle
         if (kb->vkCode == VK_LMENU && keyDown && !altDown)
         {
             altDown = true;
             auto now = std::chrono::steady_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastAltPress).count();
-            if (duration <= 300) // double-tap within 300ms
+            if (duration <= 300)
             {
                 active = !active;
                 std::cout << "Active = " << active << "\n";
@@ -76,18 +87,19 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
             case 'D': D_pressed = keyDown; return 1;
             case 'Q': Q_pressed = keyDown; return 1;
             case 'E': E_pressed = keyDown; return 1;
+            case 'R': R_pressed = keyDown; return 1;
+            case 'F': F_pressed = keyDown; return 1;
             }
         }
     }
 
-    // Let all other keys (including Alt) pass through normally
     return CallNextHookEx(keyboardHook, nCode, wParam, lParam);
 }
 
 // Input loop
 void InputLoop()
 {
-    const int speed = 5;
+    const int baseSpeed = 5;
     bool leftHeld = false;
     bool rightHeld = false;
 
@@ -96,10 +108,14 @@ void InputLoop()
         if (active)
         {
             int dx = 0, dy = 0;
-            if (W_pressed) dy -= speed; // up
-            if (S_pressed) dy += speed; // down
-            if (A_pressed) dx -= speed; // left
-            if (D_pressed) dx += speed; // right
+            if (W_pressed) dy -= baseSpeed;
+            if (S_pressed) dy += baseSpeed;
+            if (A_pressed) dx -= baseSpeed;
+            if (D_pressed) dx += baseSpeed;
+
+            // Shift = accelerate, Ctrl = slow
+            if (GetAsyncKeyState(VK_SHIFT) & 0x8000) { dx *= 2; dy *= 2; }
+            if (GetAsyncKeyState(VK_CONTROL) & 0x8000) { dx /= 2; dy /= 2; }
 
             MyMouse::MoveMouse(dx, dy);
 
@@ -110,6 +126,10 @@ void InputLoop()
             // Handle right click hold
             if (E_pressed && !rightHeld) { MyMouse::RightDown(); rightHeld = true; }
             if (!E_pressed && rightHeld) { MyMouse::RightUp(); rightHeld = false; }
+
+            // Scroll
+            if (R_pressed) MyMouse::Scroll(120); // scroll up
+            if (F_pressed) MyMouse::Scroll(-120); // scroll down
         }
         else
         {
@@ -128,7 +148,8 @@ int main()
     if (!keyboardHook) { std::cout << "Failed to install hook!\n"; return 1; }
 
     std::cout << "Double-tap Left Alt to toggle functionality ON/OFF\n";
-    std::cout << "W/A/S/D = move, Q = left click, E = right click\n";
+    std::cout << "W/A/S/D = move, Q = left click, E = right click, R = scroll up, F = scroll down\n";
+    std::cout << "Shift = accelerate, Ctrl = slow\n";
 
     std::thread loopThread(InputLoop);
 
