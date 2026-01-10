@@ -98,7 +98,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
 
     // Let all other keys pass through normally
     return CallNextHookEx(keyboardHook, nCode, wParam, lParam);
-}
+} 
 
 // Input loop
 void InputLoop()
