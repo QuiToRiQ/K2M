@@ -19,22 +19,30 @@ public:
         SendInput(1, &input, sizeof(INPUT));
     }
 
-    static void ClickLeftMouse()
-    {
+    static void LeftDown() {
         INPUT input = {};
         input.type = INPUT_MOUSE;
         input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
         SendInput(1, &input, sizeof(INPUT));
+    }
+
+    static void LeftUp() {
+        INPUT input = {};
+        input.type = INPUT_MOUSE;
         input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
         SendInput(1, &input, sizeof(INPUT));
     }
 
-    static void ClickRightMouse()
-    {
+    static void RightDown() {
         INPUT input = {};
         input.type = INPUT_MOUSE;
         input.mi.dwFlags = MOUSEEVENTF_RIGHTDOWN;
         SendInput(1, &input, sizeof(INPUT));
+    }
+
+    static void RightUp() {
+        INPUT input = {};
+        input.type = INPUT_MOUSE;
         input.mi.dwFlags = MOUSEEVENTF_RIGHTUP;
         SendInput(1, &input, sizeof(INPUT));
     }
@@ -45,13 +53,9 @@ std::atomic<bool> W_pressed(false);
 std::atomic<bool> A_pressed(false);
 std::atomic<bool> S_pressed(false);
 std::atomic<bool> D_pressed(false);
-std::atomic<bool> Q_pressed(false);
-std::atomic<bool> E_pressed(false);
-std::atomic<bool> active(false); // ON/OFF switch
-
-// Track click state to prevent repeated clicks
-std::atomic<bool> Q_handled(false);
-std::atomic<bool> E_handled(false);
+std::atomic<bool> Q_pressed(false); // left click hold
+std::atomic<bool> E_pressed(false); // right click hold
+std::atomic<bool> active(false);    // toggle ON/OFF
 
 HHOOK keyboardHook;
 
@@ -61,19 +65,18 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
     if (nCode == HC_ACTION)
     {
         KBDLLHOOKSTRUCT* kb = (KBDLLHOOKSTRUCT*)lParam;
-
         bool keyDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
         bool keyUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
 
-        // F6 always works to toggle
+        // F6 toggle
         if (kb->vkCode == VK_F6 && keyDown)
         {
             active = !active;
             std::cout << "Active = " << active << "\n";
-            return 1; // suppress F6 to avoid typing in editor
+            return 1;
         }
 
-        // Only handle our custom keys when active
+        // Only handle our keys when active
         if (active)
         {
             switch (kb->vkCode)
@@ -83,33 +86,27 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
             case 'S': S_pressed = keyDown; return 1;
             case 'D': D_pressed = keyDown; return 1;
 
-            case 'Q':
-                if (keyDown && !Q_handled) { Q_pressed = true; Q_handled = true; }
-                if (keyUp) { Q_pressed = false; Q_handled = false; }
-                return 1;
-
-            case 'E':
-                if (keyDown && !E_handled) { E_pressed = true; E_handled = true; }
-                if (keyUp) { E_pressed = false; E_handled = false; }
-                return 1;
+            case 'Q': Q_pressed = keyDown; return 1; // hold/release
+            case 'E': E_pressed = keyDown; return 1; // hold/release
             }
         }
     }
 
-    // Let all other keys pass through normally
     return CallNextHookEx(keyboardHook, nCode, wParam, lParam);
-} 
+}
 
 // Input loop
 void InputLoop()
 {
-    const int speed = 5; // pixels per loop
+    const int speed = 5; // pixels per iteration
+    bool leftHeld = false;
+    bool rightHeld = false;
+
     while (true)
     {
-        if (active) // Only move/click if activated
+        if (active)
         {
             int dx = 0, dy = 0;
-
             if (W_pressed) dy -= speed;
             if (S_pressed) dy += speed;
             if (A_pressed) dx -= speed;
@@ -117,9 +114,13 @@ void InputLoop()
 
             MyMouse::MoveMouse(dx, dy);
 
-            // Only click once per key press
-            if (Q_pressed) { MyMouse::ClickLeftMouse(); Q_pressed = false; }
-            if (E_pressed) { MyMouse::ClickRightMouse(); E_pressed = false; }
+            // Handle left click hold
+            if (Q_pressed && !leftHeld) { MyMouse::LeftDown(); leftHeld = true; }
+            if (!Q_pressed && leftHeld) { MyMouse::LeftUp(); leftHeld = false; }
+
+            // Handle right click hold
+            if (E_pressed && !rightHeld) { MyMouse::RightDown(); rightHeld = true; }
+            if (!E_pressed && rightHeld) { MyMouse::RightUp(); rightHeld = false; }
 
             // Detect Shift / Ctrl
             bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
@@ -128,7 +129,7 @@ void InputLoop()
             if (ctrl)  std::cout << "Ctrl held\n";
         }
 
-        Sleep(10); // smooth update interval
+        Sleep(10);
     }
 }
 
