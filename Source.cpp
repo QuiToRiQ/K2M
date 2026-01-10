@@ -9,6 +9,12 @@
 //If changing speed intrepts mouse click (resets it if was clicked previously)
 
 /*Try using double Caps Lock instead of double ALT for on/off*/ /*double Caps Lock can be used to simulate arrow keys while double Alt for mouse actions*/
+
+/*
+Completely suppres Caps Lock
+and use double caps lock for caps lock 
+and single caps lock for on/off mouse switch
+*/
   
 #include <Windows.h>
 #include <iostream>
@@ -70,7 +76,17 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
         bool keyDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
         bool keyUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
 
+        // -------------------------------
+        // CTRL = BYPASS (no suppression)
+        // -------------------------------
+        if (GetAsyncKeyState(VK_CONTROL) & 0x8000)
+        {
+            return CallNextHookEx(keyboardHook, nCode, wParam, lParam);
+        }
+
+        // -------------------------------
         // Double-tap Left Alt toggle
+        // -------------------------------
         if (kb->vkCode == VK_LMENU && keyDown && !altDown)
         {
             altDown = true;
@@ -82,13 +98,15 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
                 std::cout << "Active = " << active << "\n";
             }
             lastAltPress = now;
-        }
+        } 
         if (kb->vkCode == VK_LMENU && keyUp)
         {
             altDown = false;
         }
 
-        // Only handle keys when active
+        // -------------------------------
+        // Only suppress keys when active
+        // -------------------------------
         if (active)
         {
             switch (kb->vkCode)
@@ -150,6 +168,17 @@ void InputLoop()
             if (leftHeld) { MyMouse::LeftUp(); leftHeld = false; }
             if (rightHeld) { MyMouse::RightUp(); rightHeld = false; }
         }
+
+        // Force Button Click
+        if (GetAsyncKeyState(VK_F6) & 0x8000)
+        [](){
+            INPUT input = {};
+            input.type = INPUT_MOUSE;
+            input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+            SendInput(1, &input, sizeof(INPUT));
+            input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
+            SendInput(1, &input, sizeof(INPUT));
+        }();
 
         Sleep(10);
     }
