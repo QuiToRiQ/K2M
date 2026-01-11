@@ -1,4 +1,4 @@
-//Remove control functionality because its not comfortable to use.
+﻿//Remove control functionality because its not comfortable to use.
 
 //Use alt instead of control
 
@@ -79,7 +79,16 @@ bool altDown = false;
 // Simulate CapsLock button
 void ToggleCapsLock()
 {
-	
+	INPUT input[2] = {};
+
+	input[0].type = INPUT_KEYBOARD;
+	input[0].ki.wScan = MapVirtualKey(VK_CAPITAL, MAPVK_VK_TO_VSC);
+	input[0].ki.dwFlags = KEYEVENTF_SCANCODE;
+
+	input[1] = input[0];
+	input[1].ki.dwFlags = KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP;
+
+	SendInput(2, input, sizeof(INPUT));
 }
 
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
@@ -96,26 +105,6 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
 		if (GetAsyncKeyState(VK_CONTROL) & 0x8000)
 		{
 			return CallNextHookEx(keyboardHook, nCode, wParam, lParam);
-		}
-
-		// -------------------------------
-		// Double-tap Left Alt toggle
-		// -------------------------------
-		if (kb->vkCode == VK_LMENU && keyDown && !altDown)
-		{
-			altDown = true;
-			auto now = std::chrono::steady_clock::now();
-			auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastAltPress).count();
-			if (duration <= 300)
-			{
-				active = !active;
-				std::cout << "Active = " << active << "\n";
-			}
-			lastAltPress = now;
-		}
-		if (kb->vkCode == VK_LMENU && keyUp)
-		{
-			altDown = false;
 		}
 
 		// -------------------------------
@@ -136,7 +125,19 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
 
 		was_exception_pressed = exception_pressed;
 		if (active && exception_pressed) return 1;
-		if (kb->vkCode == 0x14) { CapsLock_pressed = keyDown; return 1; }
+		if (kb->vkCode == VK_CAPITAL)
+		{
+			bool injected = (kb->flags & LLKHF_INJECTED) != 0;
+
+			if (!injected)
+			{
+				// Physical CapsLock → use as mouse toggle key
+				CapsLock_pressed = keyDown;
+				return 1;    // suppress physical CapsLock
+			}
+
+			// Injected CapsLock → allow it to reach Windows
+		}
 	}
 
 	return CallNextHookEx(keyboardHook, nCode, wParam, lParam);
@@ -198,7 +199,7 @@ void InputLoop()
 			if (leftHeld) { MyMouse::LeftUp(); leftHeld = false; }
 			if (rightHeld) { MyMouse::RightUp(); rightHeld = false; }
 		}
-
+		
 		Sleep(10);
 	}
 }
