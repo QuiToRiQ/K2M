@@ -1,25 +1,8 @@
-﻿//Remove control functionality because its not comfortable to use.
-
-//Use alt instead of control
-
-//Try making mouse slow by default and two acceleration modifiers alt and shift
-
-//Some apps require special strategy (for example in file explorer. if u want to rename a folder, when u disable mouse the focus lefts on another window * current fix is to press alt again to move focus back)
-
-//If changing speed intrepts mouse click (resets it if was clicked previously)
-
-/*Try using double Caps Lock instead of double ALT for on/off*/ /*double Caps Lock can be used to simulate arrow keys while double Alt for mouse actions*/
-
+﻿//Some apps require special strategy (for example in file explorer. if u want to rename a folder, when u disable mouse the focus lefts on another window * current fix is to press alt again to move focus back)
+ 
 /*
-Completely suppres Caps Lock
-and use double caps lock for caps lock
-and single caps lock for on/off mouse switch
-
-
-Keyboard To Mouse
-Suppress: Caps Lock
-Caps Lock -> on off
-Shift + Caps Lock -> Caps Lock input
+use 'z' 'x' 'c' for middle mouse button and arrow/back&forward keys
+make a choice between using arrow/back&forward keys and between holding and pressing capslock
 */
 
 #include <Windows.h>
@@ -28,32 +11,95 @@ Shift + Caps Lock -> Caps Lock input
 #include <thread>
 #include <chrono>
 
+struct UserSettings
+{
+	std::atomic<bool> bHoldCapsLock = false; // decides either to use toggle or hold capslock method
+	std::atomic<bool> bUseArrows = false; // switches between arrow keys / back&forward mouse buttons
+
+	//////////////////////////////////////////////////////////////////////////////////////////////
+	// choose between ctrl+lmb or middle mouse button, which either can work depending on app
+	//////////////////////////////////////////////////////////////////////////////////////////////
+};
+UserSettings US_Profile;
+
 class MyMouse
 {
 public:
 	static void MoveMouse(int dx, int dy)
 	{
 		if (dx == 0 && dy == 0) return;
-		INPUT input = {};
-		input.type = INPUT_MOUSE;
-		input.mi.dx = dx;
-		input.mi.dy = dy;
-		input.mi.dwFlags = MOUSEEVENTF_MOVE;
-		SendInput(1, &input, sizeof(INPUT));
+		INPUT i = {};
+		i.type = INPUT_MOUSE;
+		i.mi.dx = dx;
+		i.mi.dy = dy;
+		i.mi.dwFlags = MOUSEEVENTF_MOVE;
+		SendInput(1, &i, sizeof(INPUT));
 	}
 
-	static void LeftDown() { INPUT i = {}; i.type = INPUT_MOUSE; i.mi.dwFlags = MOUSEEVENTF_LEFTDOWN; SendInput(1, &i, sizeof(INPUT)); }
-	static void LeftUp() { INPUT i = {}; i.type = INPUT_MOUSE; i.mi.dwFlags = MOUSEEVENTF_LEFTUP;   SendInput(1, &i, sizeof(INPUT)); }
-	static void RightDown() { INPUT i = {}; i.type = INPUT_MOUSE; i.mi.dwFlags = MOUSEEVENTF_RIGHTDOWN; SendInput(1, &i, sizeof(INPUT)); }
-	static void RightUp() { INPUT i = {}; i.type = INPUT_MOUSE; i.mi.dwFlags = MOUSEEVENTF_RIGHTUP;   SendInput(1, &i, sizeof(INPUT)); }
+	static void LeftDown() { SendMouse(MOUSEEVENTF_LEFTDOWN); }
+	static void LeftUp() { SendMouse(MOUSEEVENTF_LEFTUP); }
+	static void RightDown() { SendMouse(MOUSEEVENTF_RIGHTDOWN); }
+	static void RightUp() { SendMouse(MOUSEEVENTF_RIGHTUP); }
+	static void MiddleDown() { SendMouse(MOUSEEVENTF_MIDDLEDOWN); }
+	static void MiddleUp() { SendMouse(MOUSEEVENTF_MIDDLEUP); }
 
 	static void Scroll(int amount)
 	{
-		INPUT input = {};
-		input.type = INPUT_MOUSE;
-		input.mi.dwFlags = MOUSEEVENTF_WHEEL;
-		input.mi.mouseData = amount;
-		SendInput(1, &input, sizeof(INPUT));
+		INPUT i = {};
+		i.type = INPUT_MOUSE;
+		i.mi.dwFlags = MOUSEEVENTF_WHEEL;
+		i.mi.mouseData = amount;
+		SendInput(1, &i, sizeof(INPUT));
+	}
+
+	static void Back()
+	{
+		if(US_Profile.bUseArrows) PressKey(VK_LEFT);// Left Arrow Key
+		else XButton(XBUTTON1);// Back Mouse Button
+	}
+
+	static void Forward()
+	{
+		if (US_Profile.bUseArrows) PressKey(VK_RIGHT);// Right Arrow Key
+		else XButton(XBUTTON2);// Back Mouse Button
+	}
+
+private:
+	static void SendMouse(DWORD flags)
+	{
+		INPUT i = {};
+		i.type = INPUT_MOUSE;
+		i.mi.dwFlags = flags;
+		SendInput(1, &i, sizeof(INPUT));
+	}
+
+	static void XButton(WORD button)
+	{
+		INPUT i = {};
+		i.type = INPUT_MOUSE;
+		i.mi.dwFlags = MOUSEEVENTF_XDOWN;
+		i.mi.mouseData = button;
+		SendInput(1, &i, sizeof(INPUT));
+
+		ZeroMemory(&i, sizeof(i));
+		i.type = INPUT_MOUSE;
+		i.mi.dwFlags = MOUSEEVENTF_XUP;
+		i.mi.mouseData = button;
+		SendInput(1, &i, sizeof(INPUT));
+	}
+
+	static void PressKey(WORD vk)
+	{
+		INPUT i = {};
+		i.type = INPUT_KEYBOARD;
+		i.ki.wVk = vk;
+		SendInput(1, &i, sizeof(INPUT));
+
+		ZeroMemory(&i, sizeof(i));
+		i.type = INPUT_KEYBOARD;
+		i.ki.wVk = vk;
+		i.ki.dwFlags = KEYEVENTF_KEYUP;
+		SendInput(1, &i, sizeof(INPUT));
 	}
 };
 
@@ -67,7 +113,9 @@ std::atomic<bool> Q_pressed(false); // lmb
 std::atomic<bool> E_pressed(false);	// rmb
 std::atomic<bool> R_pressed(false); // scroll up
 std::atomic<bool> F_pressed(false); // scroll down
-std::atomic<bool> was_exception_pressed(false); // checks if in the previous loop any exception button was pressed
+std::atomic<bool> Z_pressed(false); // back
+std::atomic<bool> X_pressed(false); // forward
+std::atomic<bool> C_pressed(false); // mmb
 std::atomic<bool> active(false);
 
 HHOOK keyboardHook;
@@ -125,9 +173,11 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
 		case 'E': E_pressed = keyDown; exception_pressed = true; break;
 		case 'R': R_pressed = keyDown; exception_pressed = true; break;
 		case 'F': F_pressed = keyDown; exception_pressed = true; break;
+		case 'Z': Z_pressed = keyDown; exception_pressed = true; break;
+		case 'X': X_pressed = keyDown; exception_pressed = true; break;
+		case 'C': C_pressed = keyDown; exception_pressed = true; break;
 		}
 
-		was_exception_pressed = exception_pressed;
 		if (active && exception_pressed) return 1;
 		if (kb->vkCode == VK_CAPITAL)
 		{
@@ -156,20 +206,24 @@ void InputLoop()
 	bool rightHeld = false;
 	bool capsHeld = false;
 
+	bool backHeld = false;
+	bool forwardHeld = false;
+	bool middleHeld = false;
+
 	while (true)
 	{
 		// Toggle activation on off && Caps Lock when shift pressed
-		if (!CapsLock_pressed && capsHeld) 
-		{ 
+		if (!CapsLock_pressed && capsHeld)
+		{
 			if (GetAsyncKeyState(VK_SHIFT) & 0x8000) ToggleCapsLock();
-			else active = !active; 
-		
+			else active = !active;
+
 		} capsHeld = CapsLock_pressed;
 
 		if (active)
 		{
 			int dx = 0, dy = 0, ds = 0; // delta x, delta y, delta scroll
-	
+
 			// Cursor Movements
 			if (W_pressed) dy -= baseMouseSpeed;
 			if (S_pressed) dy += baseMouseSpeed;
@@ -196,16 +250,45 @@ void InputLoop()
 			if (E_pressed && !rightHeld) { MyMouse::RightDown(); rightHeld = true; }
 			if (!E_pressed && rightHeld) { MyMouse::RightUp(); rightHeld = false; }
 
+			// Handle back & forward mouse keys / arrows
+			if (Z_pressed && !backHeld) MyMouse::Back(); backHeld = Z_pressed;
+			if (X_pressed && !forwardHeld) MyMouse::Forward(); forwardHeld = X_pressed;
+			
+			// Handle middle mouse buttons
+			if (C_pressed && !middleHeld) { MyMouse::MiddleDown(); middleHeld = true; }
+			if (!C_pressed && middleHeld) { MyMouse::MiddleUp(); middleHeld = false; }
 		}
 		else
 		{
 			// Release any held clicks when inactive
 			if (leftHeld) { MyMouse::LeftUp(); leftHeld = false; }
 			if (rightHeld) { MyMouse::RightUp(); rightHeld = false; }
+			if (middleHeld) { MyMouse::MiddleUp(); middleHeld = false; }
 		}
-		
+
 		Sleep(10);
 	}
+}
+
+// Requires for further setup
+bool AskYesNo(const wchar_t* text, const wchar_t* title)
+{
+	int result = MessageBoxW(
+		nullptr,
+		text,
+		title,
+		MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2
+	);
+
+	if (result == IDYES)
+	{
+		return true;
+	}
+	else if (result == IDNO)
+	{
+		return false;
+	}
+
 }
 
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
