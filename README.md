@@ -2,18 +2,14 @@ Don't Use Mouse. It's a K2M (Key to Mouse) app that binds mouse actions to wasd 
 
 Usage:
 
-  Caps Lock: on/off (Shift + Caps Lock: Simulates CapsLock action)
-  
-  when the mouse mode is 'on':
-  
+    Caps Lock: on/off (Shift + Caps Lock: Simulates CapsLock action)
+    
     WASD: move cursor
 
     Q: left click
-    
     E: right click
     
     Hold Shift: Accelerate
-    
     Hold Alt: Percise Mode
 
     Z: Back
