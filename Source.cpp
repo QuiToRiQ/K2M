@@ -16,7 +16,7 @@ make a choice between using arrow/back&forward keys and between holding and pres
 #include <string>     
 #include <algorithm>  
 #include <sstream>    
-
+#include <filesystem>
 
 struct UserSettings
 {
@@ -356,29 +356,51 @@ void InputLoop()
 	}
 }
 
-// Requires for further setup
-bool AskYesNo(const wchar_t* text, const wchar_t* title)
+/////////////////////////////////////
+void AddAppStartup()
 {
-	int result = MessageBoxW(
-		nullptr,
-		text,
-		title,
-		MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2
-	);
+    // Ask user about auto-start
+    int result = MessageBoxW(nullptr,
+                             L"Do you want this app to run at startup?",
+                             L"My App",
+                             MB_YESNO | MB_ICONQUESTION);
 
-	if (result == IDYES)
-	{
-		return true;
-	}
-	else if (result == IDNO)
-	{
-		return false;
-	}
+    if (result == IDYES)
+    {
+        // Get current executable path
+        wchar_t buffer[MAX_PATH];
+        GetModuleFileNameW(nullptr, buffer, MAX_PATH);
+        std::wstring exePath(buffer);
+
+        // Add to registry startup
+        HKEY hKey;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                          L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                          0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
+        {
+            RegSetValueExW(hKey, L"MyApp", 0, REG_SZ,
+                           (const BYTE*)exePath.c_str(),
+                           (DWORD)((exePath.size() + 1) * sizeof(wchar_t)));
+            RegCloseKey(hKey);
+        }
+    }
 
 }
 
+
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {
+	HANDLE hMutex = CreateMutexW(nullptr, TRUE, L"Global\\CustomMouseKeysInstanceLock");
+
+	if (GetLastError() == ERROR_ALREADY_EXISTS)
+	{
+		// Another copy is already running
+		MessageBoxW(nullptr, L"The application is already running. Try holding down or pressing the Caps Lock key to see if you can control the cursor with WASD.", L"Error", MB_ICONERROR);
+		return 0;
+	}
+
+	AddAppStartup();
+
 	CustomSaves::loadSettings("config.ini", US_Profile);
 		
 	keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, NULL, 0);
