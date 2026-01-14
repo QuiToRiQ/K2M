@@ -14,3 +14,7 @@ Usage:
     Z: Back or LeftArrowKey depends on bUseArrows in config.ini 
     X: Forward
     C: Middle Mouse Button
+
+
+
+* If the mouse does not work properly, try using Ctrl+Alt+Delete -> cancel (this reinitiates the input system, which makes the mouse work). Does not help for system apps, which have more priority for input handling (like task manager or any windows advenced settings)
