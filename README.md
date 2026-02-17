@@ -1,8 +1,8 @@
-sK2M offers software that lets you use your keyboard as a mouse.
+K2M is a program that translates keyboard keys to mouse input, so that you can make fast changes in code or text without moving your hand.
 
 Usage:
 
-    Caps Lock: Hold or Switch depends on bHoldCapsLock in config.ini (Shift + Caps Lock: Simulates CapsLock action)
+    Caps Lock: Hold/Switch: bHoldCapsLock in config.ini (Shift + Caps Lock: Simulates CapsLock action)
     
     WASD: move cursor
 
@@ -17,4 +17,5 @@ Usage:
 
 
 
-* If the mouse does not work properly, try using Ctrl+Alt+Delete -> cancel (this reinitiates the input system, which makes the mouse work). Does not help for system apps, which have more priority for input handling (like task manager or any Windows advanced settings)
+* If the mouse does not work properly, try using Ctrl+Alt+Delete -> cancel (this reinitiates the input system, which makes the mouse work).
+* The app has less priority than system applications (example: you can't use it in task manager).
